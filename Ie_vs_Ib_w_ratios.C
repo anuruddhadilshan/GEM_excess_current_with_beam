@@ -1,3 +1,16 @@
+//ROOT macro to plot GEM excess currents under high background conditions.
+
+//Anuruddha Rathnayake 
+
+//Will take a text file with columns "<beam current> <module_1 excess current> <module_2 excess current> ... " as the input
+//Usage: in root
+   // root [0] .L Ie_vs_Ib_w_ratios.C
+   // root [1] Ie_vs_Ib_w_ratios(<number_of_modules>,"<name of the input text file>","<Beam energy in GeV>","<Angle of the BB spectrometer>","<Target in use>","<name of the output pdf file>")
+
+//Will generate a pdf file with two types of plots. "excess current vs beam current" plots on the left and "Fractional change of excess current vs beam current" plots on the left for each GEM module.
+
+
+
 void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *beam_energy, const char *bb_angle, const char *target, const char *output_file_name){
   
   double I_beam;
@@ -17,37 +30,49 @@ void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *b
     
   int n = 0;
  
-  //Putting data points in to the TGraphs
+
+  /////Putting data points in to the TGraphs////
   while(1)
     {
       file >> I_beam >> I_ex[0] >> I_ex[1] >> I_ex[2] >> I_ex[3] >> I_ex[4] >> I_ex[5] >>  I_ex[6] >> I_ex[7] >> I_ex[8] >> I_ex[9] >> I_ex[10];// Will have to change here if no of modules changes.
       
       n = g[0]->GetN();// Get the number of data points so far
       
-      for(int i=0; i < n_modules; i++){
+      for(int i=0; i < n_modules; i++)
+	{
 
-	g[i]->SetPoint(n, I_beam, I_ex[i]);
-
-       	if(n==1){x1[i] = I_beam; y1[i] = I_ex[i];}
-	
-	if(n==2){x2[i] = I_beam; y2[i] = I_ex[i];}
+	  g[i]->SetPoint(n, I_beam, I_ex[i]);
 	  
-      }
-
-      if(file.eof()) break;
+	  //Since the front trackers are subjected to high background, the GEM "charging up" process is assumed to be completed by the first two data points. Thus we make the line out of those two.
+	  if(i < n_modules-4)         
+	    {
+	      if(n==1){x1[i] = I_beam; y1[i] = I_ex[i];}
+	
+	      if(n==2){x2[i] = I_beam; y2[i] = I_ex[i];}
+	    }
+	  //Since the back trackers are subjected to relatively low background, the GEM "charging up" process is assumed to be completed only by the second data point and onwards. Thus we make the line out of the second two data points.
+	  else
+	    {
+	      if(n==2){x1[i] = I_beam; y1[i] = I_ex[i];}
+	      
+	      if(n==3){x2[i] = I_beam; y2[i] = I_ex[i];}
+	    }
+	}
       
+      if(file.eof()) break;
     }
+  
 
-
-
-  //Making the lines which connects the first two data points with beam on : to help get an idea about how the GEM "gain" vary.
+  
+  /////Making the lines which connects the first two data points with beam on : to help get an idea about how the GEM "gain" vary.////
    
   TF1 *f[n_modules];
   double gradient[n_modules]; // Gradient
   double intercept[n_modules]; // Intercept
 
-  for(int i=0; i < n_modules; i++){
-
+  for(int i=0; i < n_modules; i++)
+    {
+      
     gradient[i] = (y2[i]-y1[i])/(x2[i]-x1[i]);
     intercept[i] = y2[i] - gradient[i]*x2[i];
     
@@ -55,7 +80,7 @@ void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *b
     f[i]->SetParameter(0,gradient[i]);
     f[i]->SetParameter(1,intercept[i]);
     
-  }
+    }
   
 
   //Also making the plots (I_observed - I_from_line)/I_frrom_line vs I_beam. These will give an idea how the gain of the chamber decreases as fraction compared to the initial gain during low luminosity.
@@ -64,31 +89,54 @@ void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *b
   double I_from_line;//Current calculatef from the line
   double I_excess_observed; //Observed excess current
   
-  for(int i=0; i < n_modules; i++){
-    
-    for(int j=1; j < n+1; j++){
+  for(int i=0; i < n_modules; i++)
+    {
       
-      I_beam = g[i]->GetPointX(j);
+      if(i < n_modules-4)
+
+	{
+	  for(int j=3; j < n+1; j++) // Excludes the first two data points that were used to make the line.
+	    {
+
+	      I_beam = g[i]->GetPointX(j);
+	    
+	      I_from_line = gradient[i]*I_beam + intercept[i];
+	    
+	      I_excess_observed = g[i]->GetPointY(j);
+	      
+	      double ratio = (I_from_line - I_excess_observed)/I_from_line;
+	      
+	      gratios[i]->SetPoint(j-3, I_beam , ratio);
+	      
+	    }
+	}
+
+      else
+	{
+	  for(int j=4; j < n+1; j++) //Excludes the 2nd and 3rd data points that were used to make the line as well as the 1st data point.
+	    {
+
+	      I_beam = g[i]->GetPointX(j);
+	    
+	      I_from_line = gradient[i]*I_beam + intercept[i];
+	    
+	      I_excess_observed = g[i]->GetPointY(j);
+	      
+	      double ratio = (I_from_line - I_excess_observed)/I_from_line;
+	      
+	      gratios[i]->SetPoint(j-4, I_beam , ratio);
+	      
+	    }
+	}
       
-      I_from_line = gradient[i]*I_beam + intercept[i];
-
-      I_excess_observed = g[i]->GetPointY(j);
-      
-      double ratio = (I_from_line - I_excess_observed)/I_from_line;
-
-      gratios[i]->SetPoint(j-1, I_beam , ratio);
-
     }
-    
-  }
-
-
+  
+  
 
   //Making the plots
-
   TCanvas *c[n_modules];
 
-   TString pdffilename = output_file_name;
+  TString pdffilename = output_file_name;
   //pdffilename.ReplaceAll( ".root", ".pdf");
   //pdffilename.Prepend("plots/");
 
@@ -108,10 +156,8 @@ void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *b
     c[i]->Divide(2,1);
     
     //I_excess vs I_beam plots
-     
-    c[i]->cd(1);//Put 1
-    //c->cd(1);
-    
+    c[i]->cd(1);
+        
     gPad->SetLeftMargin(lmargin);
     gPad->SetRightMargin(rmargin);
     gPad->SetBottomMargin(bmargin);
@@ -129,10 +175,8 @@ void Ie_vs_Ib_w_ratios(int n_modules, const char *input_file_name, const char *b
     f[i]->Draw("Same");
      
     //Excess Fraction vs I_beam plots
-     
     c[i]->cd(2);
-    //c->cd(2);
-    
+        
     gPad->SetLeftMargin(lmargin);
     gPad->SetRightMargin(rmargin);
     gPad->SetBottomMargin(bmargin);
